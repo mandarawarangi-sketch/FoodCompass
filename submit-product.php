@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__ . '/owner-auth.php';
 require __DIR__ . '/db.php';
+require __DIR__ . '/product-labels.php';
 
 if (!isset($_SESSION['form_token'])) {
     $_SESSION['form_token'] = bin2hex(random_bytes(32));
@@ -32,14 +33,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ) {
         $message = 'Complete every field and enter a valid price.';
     } else {
+        try {
+            [$allergenStatus, $allergensJson, $vegetarianClaim, $veganClaim] = parseLabelDetails($_POST);
+            $uploads = validateLabelUploads($_FILES);
+        } catch (InvalidArgumentException $error) {
+            $message = $error->getMessage();
+        }
+    }
+    if ($message === '') {
         $check = $db->prepare('SELECT id FROM categories WHERE id = ?');
         $check->execute([$categoryId]);
 
         if (!$check->fetch()) {
             $message = 'Choose a valid category.';
         } else {
+            $created = [];
             try {
                 $db->beginTransaction();
+                [$photos, $created] = saveLabelUploads($uploads);
 
                 $product = $db->prepare(
                     'INSERT INTO products (owner_id) VALUES (?)'
@@ -49,11 +60,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $submission = $db->prepare(
                     "INSERT INTO product_submissions
-                     (product_id, name, description, category_id, price)
-                     VALUES (?, ?, ?, ?, ?)"
+                     (product_id, name, description, category_id, price, allergen_status, allergens_json, vegetarian_claim, vegan_claim, ingredients_photo, allergen_photo, nutrition_photo)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 );
                 $submission->execute([
-                    $productId, $name, $description, $categoryId, $price
+                    $productId, $name, $description, $categoryId, $price,
+                    $allergenStatus, $allergensJson, $vegetarianClaim, $veganClaim,
+                    $photos['ingredients_photo'], $photos['allergen_photo'], $photos['nutrition_photo']
                 ]);
 
                 $db->commit();
@@ -63,6 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($db->inTransaction()) {
                     $db->rollBack();
                 }
+                foreach ($created as $path) @unlink($path);
                 $message = 'Could not save the submission. Please try again.';
             }
         }
@@ -96,6 +110,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     form p { margin: 0 0 20px; }
+    fieldset { border: 1px solid #d8e8df; border-radius: 10px; margin: 20px 0; padding: 16px; }
+    .choice { display: inline-flex; align-items: center; gap: 6px; margin: 6px 14px 6px 0; }
+    .choice input { width: auto; margin: 0; }
+    .choices { margin-top: 12px; }
+    small { display: block; color: #536c5b; }
 
     label {
         display: block;
@@ -145,7 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <h1>Submit a product</h1>
     <p><?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?></p>
 
-    <form method="post">
+    <form method="post" enctype="multipart/form-data">
         <input type="hidden" name="form_token"
                value="<?= htmlspecialchars($_SESSION['form_token'], ENT_QUOTES, 'UTF-8') ?>">
 
@@ -172,6 +191,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    step="0.01" required>
         </label></p>
 
+        <?php labelForm(); ?>
         <button type="submit">Submit for review</button>
     </form>
 </body>

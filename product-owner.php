@@ -82,7 +82,7 @@ input,select{width:100%;border:1px solid var(--border);border-radius:9px;padding
 <body>
 <header class="nav"><div class="container nav-inner">
 <a class="logo" href="index.html"><span>🧭</span> FoodCompass</a>
-<nav class="navlinks"><a class="" href="index.html">Home</a><a class="" href="products.php">Products</a><a class="" href="compare.html">Compare</a><a class="" href="lists.html">Lists</a><a href="login.html" class="btn btn-primary">Sign in</a></nav>
+<nav class="navlinks"><a class="" href="index.html">Home</a><a class="" href="products.php">Products</a><a class="" href="compare.html">Compare</a><a class="" href="lists.php">Lists</a><a href="login-owner.php" class="btn btn-primary">Owner sign in</a></nav>
 </div></header>
 
 <main class="section">
@@ -93,7 +93,9 @@ input,select{width:100%;border:1px solid var(--border);border-radius:9px;padding
             <h2 style="margin-top:12px">Product management</h2>
             <p class="muted">Submit products and track administrator review.</p>
         </div>
-        <a class="btn btn-primary" href="submit-product.php">+ Submit product</a>
+        <div class="actions" style="margin-top:0">
+            <a class="btn btn-primary" href="submit-product.php">+ Submit product</a>
+        </div>
     </div>
 
     <div class="grid grid-3">
@@ -143,6 +145,10 @@ input,select{width:100%;border:1px solid var(--border);border-radius:9px;padding
                             <a class="btn btn-secondary"
                                href="edit-product.php?id=<?= (int) $product['product_id'] ?>">
                                 Edit
+                            </a>
+                            <a class="btn btn-secondary"
+                               href="submission-history.php?id=<?= (int) $product['product_id'] ?>">
+                                History
                             </a>
                             <form method="post" action="delete-product.php"
                                   style="display:inline"
