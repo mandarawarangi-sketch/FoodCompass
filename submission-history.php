@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__ . '/owner-auth.php';
 require __DIR__ . '/db.php';
+require __DIR__ . '/product-labels.php';
 
 $productId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 if (!$productId || $productId < 1) {
@@ -11,7 +12,9 @@ if (!$productId || $productId < 1) {
 }
 
 $query = $db->prepare(
-    'SELECT s.name, s.description, s.price, s.review_status,
+    'SELECT s.id, s.name, s.description, s.price, s.review_status,
+            s.allergen_status, s.allergens_json, s.vegetarian_claim, s.vegan_claim,
+            s.ingredients_photo, s.allergen_photo, s.nutrition_photo,
             s.review_note, s.submitted_at, s.reviewed_at,
             c.name AS category_name
      FROM products AS p
@@ -80,6 +83,10 @@ function showHistoryText(mixed $value): string
             <p>Category: <?= showHistoryText($submission['category_name'] ?? 'None') ?></p>
             <p>Description: <?= showHistoryText($submission['description']) ?></p>
             <p>Price: <?= showHistoryText($submission['price']) ?></p>
+            <p>Declared allergens: <?= showHistoryText(allergenSummary($submission)) ?></p>
+            <p>Vegetarian claim: <?= showHistoryText(claimSummary($submission['vegetarian_claim'])) ?></p>
+            <p>Vegan claim: <?= showHistoryText(claimSummary($submission['vegan_claim'])) ?></p>
+            <?= labelPhotoLinks($submission) ?>
             <p>Review note: <?= showHistoryText($submission['review_note'] ?: '—') ?></p>
             <hr>
         </section>

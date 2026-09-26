@@ -2,9 +2,20 @@
 declare(strict_types=1);
 
 require __DIR__ . '/db.php';
+require __DIR__ . '/product-labels.php';
+if (session_status() !== PHP_SESSION_ACTIVE) session_start();
+$customerLists = [];
+if (($_SESSION['role'] ?? '') === 'customer' && !empty($_SESSION['user_id'])) {
+    $_SESSION['list_token'] ??= bin2hex(random_bytes(32));
+    $listQuery = $db->prepare('SELECT id, list_name FROM saved_lists WHERE customer_id = ? ORDER BY created_at DESC, id DESC');
+    $listQuery->execute([(int) $_SESSION['user_id']]);
+    $customerLists = $listQuery->fetchAll();
+}
 
 $approvedProducts = $db->query(
-    "SELECT s.name, s.description, s.price,
+    "SELECT p.id AS product_id, s.id, s.name, s.description, s.price,
+            s.allergen_status, s.allergens_json, s.vegetarian_claim, s.vegan_claim,
+            s.ingredients_photo, s.allergen_photo, s.nutrition_photo,
             c.name AS category_name
      FROM products AS p
      JOIN product_submissions AS s ON s.id = (
@@ -17,6 +28,8 @@ $approvedProducts = $db->query(
      WHERE p.deleted_at IS NULL
      ORDER BY s.name"
 )->fetchAll();
+$categories = array_unique(array_map(static fn ($product) => (string) ($product['category_name'] ?? 'Uncategorized'), $approvedProducts));
+natcasesort($categories);
 
 function productText(mixed $value): string
 {
@@ -57,6 +70,7 @@ h1{font-size:48px;line-height:1.05;margin:16px 0;color:var(--dark)}h2{font-size:
 input,select{width:100%;border:1px solid var(--border);border-radius:9px;padding:12px;background:#fff;color:var(--text);outline:none}
 .filters{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.filters select{width:auto;min-width:150px}
 .product-card{overflow:hidden;padding:0}.product-img{height:155px;background:linear-gradient(135deg,#eaf7ef,#d6efe0);display:grid;place-items:center;font-size:56px}.product-body{padding:18px}
+.add-to-list{border-top:1px solid var(--border);padding-top:12px;margin-top:16px}.add-to-list label{display:block;font-size:13px;font-weight:700;margin:8px 0}.add-to-list button{margin-top:10px}.add-to-list input[type=number]{max-width:100px}.filter-label{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}.filter-label select{font-weight:400}
 .price{font-size:20px;font-weight:800;color:var(--green)}.rating{font-size:13px;color:#9a6b19}
 .layout{display:grid;grid-template-columns:240px 1fr;gap:24px}.sidebar{background:#fff;border:1px solid var(--border);border-radius:16px;padding:16px;height:max-content}.sidebar a{display:block;padding:11px;border-radius:9px;color:#607067}.sidebar a:hover,.sidebar a.active{background:var(--mint);color:var(--green);font-weight:700}
 .table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:14px;overflow:hidden}.table th,.table td{padding:14px;text-align:left;border-bottom:1px solid var(--border);font-size:14px}.table th{background:#f3f8f4;color:#506057}
@@ -71,19 +85,24 @@ input,select{width:100%;border:1px solid var(--border);border-radius:9px;padding
 <body>
 <header class="nav"><div class="container nav-inner">
 <a class="logo" href="index.html"><span>🧭</span> FoodCompass</a>
-<nav class="navlinks"><a class="" href="index.html">Home</a><a class="active" href="products.php">Products</a><a class="" href="compare.html">Compare</a><a class="" href="lists.html">Lists</a><a href="login.html" class="btn btn-primary">Sign in</a></nav>
+<nav class="navlinks"><a class="" href="index.html">Home</a><a class="active" href="products.php">Products</a><a class="" href="compare.html">Compare</a><a class="" href="lists.php">Lists</a><a href="customer-account.php" class="btn btn-primary">Sign in</a></nav>
 </div></header>
 
 <main class="section"><div class="container">
-<div class="section-head"><div><span class="badge">Customer</span><h2 style="margin-top:12px">Discover products</h2><p class="muted">Search and filter products according to dietary preferences and health requirements.</p></div></div>
-<div class="searchbar"><input id="search" data-filter placeholder="Search products, ingredients or tags..."><button class="btn btn-primary">Search</button></div>
-<div class="filters"><select><option>All categories</option><option>Breakfast</option><option>Pantry</option><option>Bakery</option><option>Snacks</option></select><select><option>Nutrition</option><option>High fibre</option><option>High protein</option><option>Plant based</option></select><select><option>Allergens</option><option>Gluten</option><option>Milk</option><option>Nuts</option></select><select><option>Ethical</option><option>Vegan</option><option>Ethical cocoa</option></select></div>
-<div class="grid grid-3">
+<?php if (isset($_GET['added']) && ($_SESSION['role'] ?? '') === 'customer'): ?><p class="notice" role="status">Product added to your list. <a href="lists.php">View my lists</a></p><?php endif; ?>
+<div class="section-head"><div><span class="badge">Customer</span><h2 style="margin-top:12px">Discover products</h2><p class="muted">Browse approved Product Owner details and label photos. Check the packaging if you need current allergy information.</p></div></div>
+<div class="searchbar"><input id="search" placeholder="Search approved products..." aria-label="Search approved products"></div>
+<div class="filters">
+<label class="filter-label">Category <select id="category-filter"><option value="">All categories</option><?php foreach ($categories as $category): ?><option value="<?= productText($category) ?>"><?= productText($category) ?></option><?php endforeach; ?></select></label>
+<label class="filter-label">Sort <select id="sort-products"><option value="name">Name: A–Z</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option></select></label>
+</div>
+<p id="no-matches" class="muted" hidden>No approved products match this search.</p>
+<div class="grid grid-3" id="product-grid">
     <?php if (!$approvedProducts): ?>
         <p class="muted">No verified products are available yet.</p>
     <?php else: ?>
         <?php foreach ($approvedProducts as $product): ?>
-            <article class="card product-card">
+            <article class="card product-card" data-name="<?= productText($product['name']) ?>" data-category="<?= productText($product['category_name'] ?? 'Uncategorized') ?>" data-price="<?= productText($product['price']) ?>">
                 <div class="product-img">🛒</div>
                 <div class="product-body">
                     <span class="tag">
@@ -94,7 +113,24 @@ input,select{width:100%;border:1px solid var(--border);border-radius:9px;padding
                     </h3>
                     <span class="tag">✓ Verified</span>
                     <p class="muted"><?= productText($product['description']) ?></p>
+                    <p><strong>Declared allergens:</strong> <?= productText(allergenSummary($product)) ?></p>
+                    <p><strong>Vegetarian claim:</strong> <?= productText(claimSummary($product['vegetarian_claim'])) ?></p>
+                    <p><strong>Vegan claim:</strong> <?= productText(claimSummary($product['vegan_claim'])) ?></p>
+                    <details><summary>Approved label photos</summary><?= labelPhotoLinks($product) ?></details>
                     <p class="price"><?= productText($product['price']) ?></p>
+                    <?php if (($_SESSION['role'] ?? '') === 'customer' && !empty($_SESSION['user_id'])): ?>
+                        <?php if ($customerLists): ?>
+                        <form class="add-to-list" method="post" action="lists.php">
+                            <input type="hidden" name="token" value="<?= productText($_SESSION['list_token']) ?>">
+                            <input type="hidden" name="action" value="add_item">
+                            <input type="hidden" name="product_id" value="<?= (int) $product['product_id'] ?>">
+                            <input type="hidden" name="return_to" value="products.php">
+                            <label>List<select name="list_id" required><?php foreach ($customerLists as $list): ?><option value="<?= (int) $list['id'] ?>"><?= productText($list['list_name']) ?></option><?php endforeach; ?></select></label>
+                            <label>Quantity<input type="number" name="quantity" value="1" min="1" max="999" required></label>
+                            <button class="btn btn-primary" type="submit">Add to list</button>
+                        </form>
+                        <?php else: ?><p class="add-to-list"><a href="lists.php">Create a list to add this product</a></p><?php endif; ?>
+                    <?php else: ?><p class="add-to-list"><a href="customer-account.php">Sign in to add to a list</a></p><?php endif; ?>
                 </div>
             </article>
         <?php endforeach; ?>
@@ -103,9 +139,25 @@ input,select{width:100%;border:1px solid var(--border);border-radius:9px;padding
 </div></main>
 <footer class="footer"><div class="container footer-grid"><div><strong>🧭 FoodCompass</strong><div class="small" style="margin-top:8px">Verified food information for informed, ethical choices.</div></div><div class="small">© 2026 FoodCompass · IS20 Project</div></div></footer>
 <script>
-document.querySelectorAll("[data-filter]").forEach(el=>el.addEventListener("input",()=>{
- const q=(document.querySelector("#search")?.value||"").toLowerCase();
- document.querySelectorAll(".product-card").forEach(c=>c.style.display=c.innerText.toLowerCase().includes(q)?"":"none");
-}));
+const grid = document.querySelector('#product-grid');
+const cards = [...grid.querySelectorAll('.product-card')];
+function updateProducts() {
+ const query = document.querySelector('#search').value.trim().toLocaleLowerCase();
+ const category = document.querySelector('#category-filter').value;
+ const sort = document.querySelector('#sort-products').value;
+ cards.sort((a,b) => sort === 'price-low' ? Number(a.dataset.price) - Number(b.dataset.price)
+   : sort === 'price-high' ? Number(b.dataset.price) - Number(a.dataset.price)
+   : a.dataset.name.localeCompare(b.dataset.name));
+ let visible = 0;
+ cards.forEach(card => {
+   card.hidden = !(card.dataset.name.toLocaleLowerCase().includes(query) && (!category || card.dataset.category === category));
+   if (!card.hidden) visible++;
+   grid.append(card);
+ });
+ document.querySelector('#no-matches').hidden = visible !== 0 || cards.length === 0;
+}
+document.querySelector('#search').addEventListener('input',updateProducts);
+document.querySelector('#category-filter').addEventListener('change',updateProducts);
+document.querySelector('#sort-products').addEventListener('change',updateProducts);
 </script>
 </body></html>

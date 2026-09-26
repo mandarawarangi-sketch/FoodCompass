@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__ . '/owner-auth.php';
 require __DIR__ . '/db.php';
+require __DIR__ . '/product-labels.php';
 
 $productId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 if (!$productId || $productId < 1) {
@@ -11,7 +12,9 @@ if (!$productId || $productId < 1) {
 }
 
 $find = $db->prepare(
-    'SELECT s.name, s.description, s.category_id, s.price
+    'SELECT s.id, s.name, s.description, s.category_id, s.price,
+            s.allergen_status, s.allergens_json, s.vegetarian_claim, s.vegan_claim,
+            s.ingredients_photo, s.allergen_photo, s.nutrition_photo
      FROM products p
      JOIN product_submissions s ON s.id = (
          SELECT MAX(s2.id)
@@ -56,33 +59,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ) {
         $message = 'Complete every field and enter a valid price.';
     } else {
+        try {
+            [$allergenStatus, $allergensJson, $vegetarianClaim, $veganClaim] = parseLabelDetails($_POST);
+            $uploads = validateLabelUploads($_FILES);
+        } catch (InvalidArgumentException $error) {
+            $message = $error->getMessage();
+        }
+    }
+    if ($message === '') {
         $validCategory = $db->prepare('SELECT id FROM categories WHERE id = ?');
         $validCategory->execute([$categoryId]);
 
         if (!$validCategory->fetch()) {
             $message = 'Choose a valid category.';
         } else {
-            // Check ownership again when saving, not just when opening the form.
-            $insert = $db->prepare(
-                "INSERT INTO product_submissions
-                 (product_id, name, description, category_id, price)
-                 SELECT p.id, ?, ?, ?, ?
-                 FROM products p
-                 WHERE p.id = ? AND p.owner_id = ? AND p.deleted_at IS NULL"
-            );
-            $insert->execute([
-                $name, $description, $categoryId, $price,
-                $productId, $ownerId
-            ]);
-
-            if ($insert->rowCount() !== 1) {
-                http_response_code(404);
-                exit('Product not found.');
+            $created = [];
+            try {
+                $db->beginTransaction();
+                // Lock the product and read its latest version again when saving.
+                $lock = $db->prepare('SELECT id FROM products WHERE id = ? AND owner_id = ? AND deleted_at IS NULL FOR UPDATE');
+                $lock->execute([$productId, $ownerId]);
+                if (!$lock->fetch()) { $db->rollBack(); http_response_code(404); exit('Product not found.'); }
+                $latest = $db->prepare('SELECT ingredients_photo, allergen_photo, nutrition_photo FROM product_submissions WHERE product_id = ? ORDER BY id DESC LIMIT 1');
+                $latest->execute([$productId]);
+                [$photos, $created] = saveLabelUploads($uploads, $latest->fetch() ?: []);
+                $insert = $db->prepare(
+                    'INSERT INTO product_submissions
+                     (product_id, name, description, category_id, price, allergen_status, allergens_json, vegetarian_claim, vegan_claim, ingredients_photo, allergen_photo, nutrition_photo)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                );
+                $insert->execute([$productId, $name, $description, $categoryId, $price,
+                    $allergenStatus, $allergensJson, $vegetarianClaim, $veganClaim,
+                    $photos['ingredients_photo'], $photos['allergen_photo'], $photos['nutrition_photo']]);
+                $db->commit();
+            } catch (Throwable $error) {
+                if ($db->inTransaction()) $db->rollBack();
+                foreach ($created as $path) @unlink($path);
+                $message = 'Could not save the submission. Please try again.';
             }
-
+            if ($message === '') {
             $_SESSION['edit_token'] = bin2hex(random_bytes(32));
             header('Location: my-submissions.php');
             exit;
+            }
         }
     }
 
@@ -91,6 +110,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'description' => $description,
         'category_id' => $categoryId,
         'price' => $price,
+        'allergen_status' => $_POST['allergen_status'] ?? 'unavailable',
+        'allergens_json' => json_encode($_POST['allergens'] ?? []),
+        'vegetarian_claim' => $_POST['vegetarian_claim'] ?? 'unknown',
+        'vegan_claim' => $_POST['vegan_claim'] ?? 'unknown',
+        'ingredients_photo' => $current['ingredients_photo'],
+        'allergen_photo' => $current['allergen_photo'],
+        'nutrition_photo' => $current['nutrition_photo'],
+        'id' => $current['id'],
     ];
 }
 
@@ -126,6 +153,11 @@ function fieldValue(mixed $value): string
     }
 
     form p { margin: 0 0 20px; }
+    fieldset { border: 1px solid #d8e8df; border-radius: 10px; margin: 20px 0; padding: 16px; }
+    .choice { display: inline-flex; align-items: center; gap: 6px; margin: 6px 14px 6px 0; }
+    .choice input { width: auto; margin: 0; }
+    .choices { margin-top: 12px; }
+    small { display: block; color: #536c5b; }
 
     label {
         display: block;
@@ -176,7 +208,7 @@ function fieldValue(mixed $value): string
     <p>Saving changes sends the new details for administrator review.</p>
     <p><?= fieldValue($message) ?></p>
 
-    <form method="post">
+    <form method="post" enctype="multipart/form-data">
         <input type="hidden" name="edit_token"
                value="<?= fieldValue($_SESSION['edit_token']) ?>">
 
@@ -207,6 +239,7 @@ function fieldValue(mixed $value): string
                    value="<?= fieldValue($current['price']) ?>">
         </label></p>
 
+        <?php labelForm($current); ?>
         <button type="submit">Save and request review</button>
     </form>
 
