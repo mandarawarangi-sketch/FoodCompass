@@ -7,6 +7,8 @@ const LABEL_PHOTO_FIELDS = [
     'allergen_photo' => 'Allergen statement',
     'nutrition_photo' => 'Nutrition label',
 ];
+const PRODUCT_PHOTO_FIELDS = ['product_photo' => 'Product package photo'];
+const UPLOAD_PHOTO_FIELDS = LABEL_PHOTO_FIELDS + PRODUCT_PHOTO_FIELDS;
 
 function labelText(mixed $value): string {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
@@ -71,7 +73,7 @@ function parseLabelDetails(array $post): array {
 function validateLabelUploads(array $files): array {
     $accepted = [];
     $mimeToExtension = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
-    foreach (LABEL_PHOTO_FIELDS as $field => $title) {
+    foreach (UPLOAD_PHOTO_FIELDS as $field => $title) {
         $file = $files[$field] ?? null;
         if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) continue;
         if (!is_array($file) || ($file['error'] ?? -1) !== UPLOAD_ERR_OK
@@ -81,9 +83,10 @@ function validateLabelUploads(array $files): array {
         }
         $mime = (new finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);
         $dimensions = getimagesize($file['tmp_name']);
-        if (!isset($mimeToExtension[$mime]) || !$dimensions || $dimensions[0] < 500 || $dimensions[1] < 500
+        $minimum = $field === 'product_photo' ? 300 : 500;
+        if (!isset($mimeToExtension[$mime]) || !$dimensions || $dimensions[0] < $minimum || $dimensions[1] < $minimum
             || $dimensions[0] > 8000 || $dimensions[1] > 8000 || $dimensions['mime'] !== $mime) {
-            throw new InvalidArgumentException($title . ': use a clear JPEG, PNG, or WebP image at least 500 × 500 pixels.');
+            throw new InvalidArgumentException($title . ': use a clear JPEG, PNG, or WebP image at least ' . $minimum . ' × ' . $minimum . ' pixels.');
         }
         $accepted[$field] = [$file['tmp_name'], $mimeToExtension[$mime]];
     }
@@ -98,7 +101,7 @@ function saveLabelUploads(array $accepted, array $previous = []): array {
     $paths = [];
     $created = [];
     try {
-        foreach (LABEL_PHOTO_FIELDS as $field => $title) {
+        foreach (UPLOAD_PHOTO_FIELDS as $field => $title) {
             $paths[$field] = $previous[$field] ?? null;
             if (!isset($accepted[$field])) continue;
             [$temporary, $extension] = $accepted[$field];
@@ -147,4 +150,12 @@ function labelForm(array $current = []): void {
         echo '</p>';
     }
     echo '</fieldset>';
+}
+
+function productPhotoForm(array $current = []): void {
+    echo '<p><label>Product package photo (optional)<input type="file" name="product_photo" accept="image/jpeg,image/png,image/webp"></label><small>Show the product packaging clearly. JPEG, PNG or WebP, at least 300 × 300 pixels, up to 5 MB. The administrator reviews this photo before customers see it.</small>';
+    if (!empty($current['product_photo']) && !empty($current['id'])) {
+        echo '<small>Current photo retained if no replacement is chosen: <a target="_blank" rel="noopener" href="label-photo.php?submission_id=' . (int) $current['id'] . '&amp;type=product_photo">View photo</a></small>';
+    }
+    echo '</p>';
 }

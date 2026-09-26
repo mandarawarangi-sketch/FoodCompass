@@ -60,13 +60,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $submission = $db->prepare(
                     "INSERT INTO product_submissions
-                     (product_id, name, description, category_id, price, allergen_status, allergens_json, vegetarian_claim, vegan_claim, ingredients_photo, allergen_photo, nutrition_photo)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                     (product_id, name, description, category_id, price, allergen_status, allergens_json, vegetarian_claim, vegan_claim, ingredients_photo, allergen_photo, nutrition_photo, product_photo)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 );
                 $submission->execute([
                     $productId, $name, $description, $categoryId, $price,
                     $allergenStatus, $allergensJson, $vegetarianClaim, $veganClaim,
-                    $photos['ingredients_photo'], $photos['allergen_photo'], $photos['nutrition_photo']
+                    $photos['ingredients_photo'], $photos['allergen_photo'], $photos['nutrition_photo'], $photos['product_photo']
                 ]);
 
                 $db->commit();
@@ -191,7 +191,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    step="0.01" required>
         </label></p>
 
-        <?php labelForm(); ?>
+        <?php productPhotoForm(); labelForm(); ?>
         <button type="submit">Submit for review</button>
     </form>
 </body>

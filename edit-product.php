@@ -14,7 +14,7 @@ if (!$productId || $productId < 1) {
 $find = $db->prepare(
     'SELECT s.id, s.name, s.description, s.category_id, s.price,
             s.allergen_status, s.allergens_json, s.vegetarian_claim, s.vegan_claim,
-            s.ingredients_photo, s.allergen_photo, s.nutrition_photo
+            s.ingredients_photo, s.allergen_photo, s.nutrition_photo, s.product_photo
      FROM products p
      JOIN product_submissions s ON s.id = (
          SELECT MAX(s2.id)
@@ -80,17 +80,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $lock = $db->prepare('SELECT id FROM products WHERE id = ? AND owner_id = ? AND deleted_at IS NULL FOR UPDATE');
                 $lock->execute([$productId, $ownerId]);
                 if (!$lock->fetch()) { $db->rollBack(); http_response_code(404); exit('Product not found.'); }
-                $latest = $db->prepare('SELECT ingredients_photo, allergen_photo, nutrition_photo FROM product_submissions WHERE product_id = ? ORDER BY id DESC LIMIT 1');
+                $latest = $db->prepare('SELECT ingredients_photo, allergen_photo, nutrition_photo, product_photo FROM product_submissions WHERE product_id = ? ORDER BY id DESC LIMIT 1');
                 $latest->execute([$productId]);
                 [$photos, $created] = saveLabelUploads($uploads, $latest->fetch() ?: []);
                 $insert = $db->prepare(
                     'INSERT INTO product_submissions
-                     (product_id, name, description, category_id, price, allergen_status, allergens_json, vegetarian_claim, vegan_claim, ingredients_photo, allergen_photo, nutrition_photo)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                     (product_id, name, description, category_id, price, allergen_status, allergens_json, vegetarian_claim, vegan_claim, ingredients_photo, allergen_photo, nutrition_photo, product_photo)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
                 );
                 $insert->execute([$productId, $name, $description, $categoryId, $price,
                     $allergenStatus, $allergensJson, $vegetarianClaim, $veganClaim,
-                    $photos['ingredients_photo'], $photos['allergen_photo'], $photos['nutrition_photo']]);
+                    $photos['ingredients_photo'], $photos['allergen_photo'], $photos['nutrition_photo'], $photos['product_photo']]);
                 $db->commit();
             } catch (Throwable $error) {
                 if ($db->inTransaction()) $db->rollBack();
@@ -117,6 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'ingredients_photo' => $current['ingredients_photo'],
         'allergen_photo' => $current['allergen_photo'],
         'nutrition_photo' => $current['nutrition_photo'],
+        'product_photo' => $current['product_photo'],
         'id' => $current['id'],
     ];
 }
@@ -239,7 +240,7 @@ function fieldValue(mixed $value): string
                    value="<?= fieldValue($current['price']) ?>">
         </label></p>
 
-        <?php labelForm($current); ?>
+        <?php productPhotoForm($current); labelForm($current); ?>
         <button type="submit">Save and request review</button>
     </form>
 

@@ -5,10 +5,10 @@ require __DIR__ . '/product-labels.php';
 if (session_status() !== PHP_SESSION_ACTIVE) session_start();
 $submissionId = filter_input(INPUT_GET, 'submission_id', FILTER_VALIDATE_INT);
 $type = (string) ($_GET['type'] ?? '');
-if (!$submissionId || !array_key_exists($type, LABEL_PHOTO_FIELDS)) {
+if (!$submissionId || !array_key_exists($type, UPLOAD_PHOTO_FIELDS)) {
     http_response_code(404); exit('Photo not found.');
 }
-$query = $db->prepare("SELECT s.id, s.review_status, s.ingredients_photo, s.allergen_photo, s.nutrition_photo, p.owner_id
+$query = $db->prepare("SELECT s.id, s.review_status, s.ingredients_photo, s.allergen_photo, s.nutrition_photo, s.product_photo, p.owner_id
     FROM product_submissions s JOIN products p ON p.id = s.product_id
     WHERE s.id = ? AND p.deleted_at IS NULL");
 $query->execute([$submissionId]);
