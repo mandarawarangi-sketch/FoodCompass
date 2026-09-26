@@ -1,0 +1,37 @@
+/* Navigation shared by customer account, lists, preferences and branch discovery. */
+body > header:not(.nav) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+body > header:not(.nav) a {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 14px;
+  margin: 0;
+  border-radius: 9px;
+  background: #eaf7ef;
+  color: #28754d;
+  text-decoration: none;
+  font-weight: 700;
+  white-space: nowrap;
+}
+body > header:not(.nav) a:first-child {
+  margin-right: auto;
+  padding-left: 0;
+  background: transparent;
+  font-size: 20px;
+}
+body > header:not(.nav) a[aria-current="page"] {
+  background: #28754d;
+  color: #fff;
+}
+body > header:not(.nav) a:focus-visible {
+  outline: 2px solid #183225;
+  outline-offset: 2px;
+}
+@media (max-width: 650px) {
+  body > header:not(.nav) a:first-child { width: 100%; }
+  body > header:not(.nav) a { white-space: normal; }
+}

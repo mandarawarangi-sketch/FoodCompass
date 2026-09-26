@@ -15,7 +15,7 @@ if (($_SESSION['role'] ?? '') === 'customer' && !empty($_SESSION['user_id'])) {
 $approvedProducts = $db->query(
     "SELECT p.id AS product_id, s.id, s.name, s.description, s.price,
             s.allergen_status, s.allergens_json, s.vegetarian_claim, s.vegan_claim,
-            s.ingredients_photo, s.allergen_photo, s.nutrition_photo,
+            s.ingredients_photo, s.allergen_photo, s.nutrition_photo, s.product_photo,
             c.name AS category_name
      FROM products AS p
      JOIN product_submissions AS s ON s.id = (
@@ -69,7 +69,7 @@ h1{font-size:48px;line-height:1.05;margin:16px 0;color:var(--dark)}h2{font-size:
 .searchbar{display:flex;gap:10px;background:#fff;padding:12px;border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow)}
 input,select{width:100%;border:1px solid var(--border);border-radius:9px;padding:12px;background:#fff;color:var(--text);outline:none}
 .filters{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.filters select{width:auto;min-width:150px}
-.product-card{overflow:hidden;padding:0}.product-img{height:155px;background:linear-gradient(135deg,#eaf7ef,#d6efe0);display:grid;place-items:center;font-size:56px}.product-body{padding:18px}
+.product-card{overflow:hidden;padding:0}.product-img{height:190px;background:linear-gradient(135deg,#eaf7ef,#d6efe0);display:grid;place-items:center}.product-img img{width:100%;height:100%;object-fit:contain;padding:12px}.product-img .placeholder{color:#47705a;font-size:15px;font-weight:700}.product-body{padding:18px}
 .add-to-list{border-top:1px solid var(--border);padding-top:12px;margin-top:16px}.add-to-list label{display:block;font-size:13px;font-weight:700;margin:8px 0}.add-to-list button{margin-top:10px}.add-to-list input[type=number]{max-width:100px}.filter-label{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}.filter-label select{font-weight:400}
 .price{font-size:20px;font-weight:800;color:var(--green)}.rating{font-size:13px;color:#9a6b19}
 .layout{display:grid;grid-template-columns:240px 1fr;gap:24px}.sidebar{background:#fff;border:1px solid var(--border);border-radius:16px;padding:16px;height:max-content}.sidebar a{display:block;padding:11px;border-radius:9px;color:#607067}.sidebar a:hover,.sidebar a.active{background:var(--mint);color:var(--green);font-weight:700}
@@ -81,16 +81,30 @@ input,select{width:100%;border:1px solid var(--border);border-radius:9px;padding
 .notice{padding:13px 15px;border-radius:10px;background:#eff8f2;border:1px solid #d7ebdd;margin-bottom:16px}
 @media(max-width:850px){.hero-grid,.layout{grid-template-columns:1fr}.grid-3,.grid-4,.grid-2,.compare{grid-template-columns:1fr 1fr}.navlinks{display:none}h1{font-size:38px}}
 @media(max-width:560px){.grid-3,.grid-4,.grid-2,.compare{grid-template-columns:1fr}.container{padding:0 16px}.section{padding:38px 0}}
+.product-img {
+    position: relative;
+    height: 190px;
+    overflow: hidden;
+}
+
+.product-img img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 12px;
+    object-fit: contain;
+}
 </style></head>
 <body>
 <header class="nav"><div class="container nav-inner">
 <a class="logo" href="index.html"><span>🧭</span> FoodCompass</a>
-<nav class="navlinks"><a class="" href="index.html">Home</a><a class="active" href="products.php">Products</a><a class="" href="compare.html">Compare</a><a class="" href="lists.php">Lists</a><a href="customer-account.php" class="btn btn-primary">Sign in</a></nav>
+<nav class="navlinks"><a class="" href="index.html">Home</a><a class="active" href="products.php">Products</a><a href="preferences.php">Recommended</a><a class="" href="compare.html">Compare</a><a class="" href="lists.php">Lists</a><a href="customer-account.php" class="btn btn-primary">Sign in</a></nav>
 </div></header>
 
 <main class="section"><div class="container">
 <?php if (isset($_GET['added']) && ($_SESSION['role'] ?? '') === 'customer'): ?><p class="notice" role="status">Product added to your list. <a href="lists.php">View my lists</a></p><?php endif; ?>
-<div class="section-head"><div><span class="badge">Customer</span><h2 style="margin-top:12px">Discover products</h2><p class="muted">Browse approved Product Owner details and label photos. Check the packaging if you need current allergy information.</p></div></div>
+<div class="section-head"><div><h2 style="margin-top:12px">Discover products</h2><p class="muted">Browse approved Product Owner details and label photos. Check the packaging if you need current allergy information.</p></div></div>
 <div class="searchbar"><input id="search" placeholder="Search approved products..." aria-label="Search approved products"></div>
 <div class="filters">
 <label class="filter-label">Category <select id="category-filter"><option value="">All categories</option><?php foreach ($categories as $category): ?><option value="<?= productText($category) ?>"><?= productText($category) ?></option><?php endforeach; ?></select></label>
@@ -103,7 +117,7 @@ input,select{width:100%;border:1px solid var(--border);border-radius:9px;padding
     <?php else: ?>
         <?php foreach ($approvedProducts as $product): ?>
             <article class="card product-card" data-name="<?= productText($product['name']) ?>" data-category="<?= productText($product['category_name'] ?? 'Uncategorized') ?>" data-price="<?= productText($product['price']) ?>">
-                <div class="product-img">🛒</div>
+                <div class="product-img"><?php if ($product['product_photo']): ?><img loading="lazy" src="label-photo.php?submission_id=<?= (int) $product['id'] ?>&amp;type=product_photo" alt="Package photo of <?= productText($product['name']) ?>"><?php else: ?><span class="placeholder">No product photo yet</span><?php endif; ?></div>
                 <div class="product-body">
                     <span class="tag">
                         <?= productText($product['category_name'] ?? 'Uncategorized') ?>
